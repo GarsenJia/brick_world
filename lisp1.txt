@@ -1,0 +1,266 @@
+                            CSC 244/444, Fall 2021
+
+                               LISP PROBLEM SET 1
+                       DUE: 5:00 pm, Monday, Sep. 27/21
+
+  • Use LOCAL variables within functions (e.g., introduced by 'let')
+    except for truly global parameters (such as a hash table) that multiple
+    functions need to access.
+  • Unless stated otherwise, include type checking in your functions; i.e., 
+    if the user gives an argument which is not of the speciﬁed type or form 
+    of the corresponding parameter, your function should return **ERROR**.
+    (More generally one might print more specific error messages.)
+
+  PREPARING FOR BUILDING BLOCK STRUCTURES
+  ```````````````````````````````````````
+  Preamble
+  ````````
+  The "Blocks World", where an AI system builds structures with children's
+  blocks on a table is a long-standing experimental domain in AI, e.g.,
+  going back to Terry Winograd's "SHRDLU" (a name based on letter frequencies)
+  in 1968-71 (e.g., see https://welovephilosophy.com/2013/04/26/shrdlu-on-film/).
+  Georgiy Platonov and Ben Kane, in our CSC department, are experimenting 
+  in a physical blocks world, focusing on question answering about spatial 
+  relations (e.g., "Which blocks are to the left of a red block?"), as well
+  as about past situations, and enabling structural concept learning, etc.
+
+  We will be working towards the ability to create block structures in
+  a 2-D Blocks World, given descriptions of those structures. In Lisp1
+  we'll do some preliminary programming to enable this. Here is an example
+  of a block structure:
+                                    ___________
+                                   |     |     |
+                                   |::J::|::K::|
+                              _____|_____|_____|            _____
+                             |     |     |     |           |     |
+                             |::G::|     |::H::|           |::I::|
+            _____       _____|_____|_____|_____|      _____|_____|_____
+           |     |     |     |     |     |     |     |     |     |     |
+           |::A::|     |::B::|     |::C::|::D::|     |::E::|     |::F::|
+  *TABLE*__|_____|_____|_____|_____|_____|_____|_____|_____|_____|_____|__
+           0     1     2     3     4     5     6     7     8     9     10
+  
+  All blocks will have names (e.g., A, B, C, ...) and colors (e.g., (RED A),
+  (BLUE B), ...). The structures will be created on a table, say *TABLE*
+  (we make it global, because it stays the same no matter what blocks we
+  specify). The blocks are unit cubes, and the table has marked positions 
+  0, 1, 2, 3, ..., each position being one unit from the previous one, 
+  and the horizontal location of a block (i.e., the horizontal location
+  of its left side) must be at one of those integer positions. 
+
+  Note that blocks can be stacked up in two ways: We can put one block
+  *directly* on another, e.g., the way K is on H, and H is on D above.
+  Or, we can put a block so as to "be astride" (or "straddle") two others,
+  e.g, the way G is astride B and C, and I is astride E and F above. 
+  (This is physically "precarious", but we posit these two possibilities
+  for simplicity. Maybe the blocks have velcro on their edges :-)
+
+  Block structure DESCRIPTIONS
+  ````````````````````````````
+  Block structure *descriptions* won't specify named blocks, but rather 
+  will just use distinct variables for distinct blocks, and say where 
+  the "base blocks" should be located (i.e., at what integer positions),
+  how the remaining blocks should be placed (i.e., ON another block, or
+  ASTRIDE two other blocks) and OPTIONALLY, what colors they should have.
+
+  For example, the following is a block structure description that
+  has the structure shown above as a particular instance (note that we
+  happen to specify just two block colors, so there are no constraints
+  on the colors of the remaining blocks):
+   ((ON-TABLE ?X1 0) (ON-TABLE ?X2 2) (ON-TABLE ?X3 4) (ON-TABLE ?X4 5)
+    (ON-TABLE ?X5 7) (ON-TABLE ?X6 9) (ASTRIDE ?Y1 ?X2 ?X3) (ON ?Y2 ?X4) 
+    (ASTRIDE ?Y3 ?X5 ?X6) (ASTRIDE ?Z1 ?Y1 ?Y2) (ON ?Z2 ?Y2) 
+    (RED ?X1) (BLUE ?X2)).
+
+  Coding
+  ``````
+0. Assume that we can supply a global list *BLOCKS* of form
+   ((<color> <block-name>) (<color> <block-name>) ...), e.g.,
+   ((RED A) (BLUE B) (GREEN A1) (BLUE B2) (GREEN B3) (BLUE B4) etc.), 
+   which lists all the blocks available to us and their color.
+
+   TASKS 1 AND 2 IN THE FOLLOWING AREN'T ACTUALLY ESSENTIAL IN THIS
+   ASSIGNMENT, BUT THEY ARE AN IMPORTANT EXERCISE FOR KNOWLEDGE 
+   MAINTENANCE IN GENERAL. THEY'LL BE USED ONLY TRIVIALLY HERE IF AT
+   ALL, BUT PERHAPS LISP2 OR LISP3 WILL MAKE SIGNIFICANT USE OF THEM.
+
+1. Make a global hash table *FACTS-HT*, and store the facts in the *BLOCKS*
+   list in that table. Begin by defining a function
+
+          (defun store-fact (fact ht) ...),
+
+   which stores one given fact (such as (RED A), (ON-TABLE D 5), (ON K H),
+   or (ASTRIDE G B C) in the give hash table), in two different ways;
+   namely, it uses two different keys, one of which is the predicate name,
+   while the other is the complete predication. For example,
+          (store-fact '(ON K H) *FACTS-HT*))
+   would store the fact (ON K H) in *FACTS-HT* both under key 'ON' and
+   under key '(ON K H)'. Note that in order to be able to use non-atomic
+   keys in *FACTS-HT*, you'll have to use
+          :test #'equal
+   in the argument list of make-hash-table. 
+
+   Note that since any number of facts can use the same predicate, you
+   should add elements to the hash table in such a way that they form a list
+   when using the predicate alone as key. For example, retrieval from
+   *FACTS-HT* using key BLUE might yield a list like
+     ((BLUE B ) (BLUE J) (BLUE H) (BLUE F));
+   Why not just (B J H F)? Because in general predicates can have more
+   than one argument, and we want to keep things simple. You can guard 
+   against duplication of list elements by using the Common Lisp function 
+   'remove-duplicates' (in general, with :test #'equal). However, when
+   using the entire predication as a key, just store T in the hash table 
+   (telling us that the fact which hashes to that hash-table location 
+   is true).
+
+   Also define a function
+
+        (defun remove-fact (fact ht) ...),
+
+   which will require again using the two keys, and removing 'fact' from
+   the list reached via the predicate, while setting the T entry, reached
+   via the entire fact, to NIL. 
+
+   COMMENT: Hash tables like *FACTS-HT* are often convenient ways to store
+      both permanent facts, and for describing a current situation in a 
+      changing world. For this we generally need a function like the above
+      for removing elements as well, not just storing them; but it's not 
+      clear yet whether we'll need this capability for our Blocks World
+      tasks.
+
+2. Having defined the above function for storing a single fact, you should
+   then define
+
+          (defun store-facts (facts ht) ...)
+
+   where the arguments are a list of facts and a hash table. This will be
+   trivial -- use a mapping function rather than a loop or recursion.
+
+   Then store the facts in the *BLOCKS* list in table *FACTS-HT*, as 
+   its initial contents. (We won't make any further changes to *FACTS-HT*
+   here, except to show it works.) In general we'll consider predications
+   to be true in the situation being described if they appear in *FACTS-HT*,
+   and false otherwise. However, certain facts may well imply others
+   that are not explicitly specified; e.g., perhaps we want to say that
+   a predication of form (ON-TABLE B 2) implies (ON B *TABLE*), or that
+   (ASTRIDE G B C) implies (SUPPORTS B G), (SUPPORTS C G), (LEFT-OF B G),
+   (LEFT-OF B C), (RIGHT-OF C G), (RIGHT-OF C B), etc. However, this 
+   won't concern us till (probably) Lisp3.
+
+   We will assume that initially there are no true "ON" or "ASTRIDE" facts,
+   and not even ones like (ON-TABLE B1 3), i.e., it's as if the blocks are 
+   off in a supply box, ready to be used but not yet in use on the table.
+
+   Demonstrate the correctness of store-facts, showing that retrieval using 
+   'gethash' works correctly when you use either predicates or complete 
+   predications as keys, for some sample lists of facts that you stored 
+   in *FACTS-HT*.
+
+   Then also demonstrate the correctness of remove-fact, by showing that
+   after such a removal, the two hash keys for the removed key yield NIL.
+
+   
+3. Define a function
+
+      (defun find-required-blocks (struc-descr) ...)
+
+   that can be applied to a structural description and generates a list 
+   of variable bindings such as
+     ((?X1 A) (?X2 B) (?X3 C) ... etc.);
+   this should pair each variable in the structural description with some
+   block picked from those given on the *BLOCKS* list, where those blocks
+   are chosen to meet any color requirements specified in the description.
+   For block-variables with no corresponding color specification, any 
+   block can be used -- but be careful to first make block choices that
+   require a particular color, so that you don't end up using, say, all
+   blue blocks arbitarily and then being unable to find another blue block 
+   corresponding to a block-variable that is specified to be blue.
+
+   To implement this function you'll probably maintain a record of what
+   blocks have already been assigned, in the process of creating the output.
+   You may also find it helpful to start by creating a list of distinct
+   variable names occurring in the structural description.
+
+   For each color specification, like (RED ?X), use the *FACTS-HT* to 
+   find candidates (even though there's little gained here compared
+   to using the *BLOCKS* list directly, since we do that below anyway).
+   Eliminate block names aready assigned, and pick arbitrarily from the 
+   rest of the candidates with that color. If there are no unassigned 
+   candidates, report an error (e.g., "**Not enough red blocks available 
+   for the structural description"). For any remaining variables, i.e., 
+   ones with no color specification, you can run through *BLOCKS* till 
+   you find an unassigned one. (Using *FACTS-HT* wouldn't help here.)
+   Again, report an error if no unassigned blocks remain. Remember to 
+   avoid duplication of block names in the output list. 
+
+   Concerning keeping track of assigned blocks, you could put them on
+   a list, and for speedy checking, also temporarily give the block 
+   names a property 'assigned' (with value T) on their property list.
+   In that case, remember to reset the property to NIL once the program 
+   terminates (either with an error message or a successful output).
+   You can do this by running through the list of assigned blocks.
+   Mind you, structural descriptions won't be very complex here (even
+   if there are many blocks available in the "world"), so you could 
+   somewhat less efficiently always scan the list of assigned block
+   names when making the next choice of a block, rather than using
+   an 'assigned' property.
+
+4. Note that the pairs on the list produced by 'find-required-blocks'
+   tell you what blocks to use in actually *building* the described
+   structure. Thus we can change the structural description to mention
+   constants only. Write a function 
+
+      (defun particularize-description (struc-decr binding-list) ...)
+
+   to do that. (This is pretty trivial -- use 'subst'.) 
+
+
+5. Define a function 
+
+       (defun find-layers (struc-descr) ...)
+
+   that takes in a structural description and finds what blocks appear 
+   at each "level" of the structure. This should work both for a 
+   structural description where all blocks are variables, and where 
+   all block variables are instantiated, i.e., for an instance of a
+   structural description. Level 1 will consist of blocks on the table; 
+   level 2 will consist of blocks that are specified as being ON or 
+   ASTRIDE level-1 blocks; etc. For our example of a structural 
+   description in the Preamble, the result should be the three lists
+
+    ((?X1 ?X2 ?X3 ?X4 ?X5 ?X6) (?Y1 ?Y2 ?Y3) (?Z1 ?Z2)).
+
+   If there is an inconsistency, i.e., a block is specified at 2 
+   different levels, report this inconsistency and quit. We won't try
+   to detect deeper inconsistencies, clashing ON-relations, or like 
+   one block being astride two others that are too far apart. (Well,
+   maybe you'd like to go for a few bonus points on that.)
+
+ Note that these functions bring us close to having the right information
+ for actually building a described structure, bottom-up. We'll consider 
+ that further in the next assignment.
+
+
+
+ NOTE:
+ `````
+   • Guangyu, your graduate TA, may also provide additional information about 
+     what he expects (documentation, etc.) or how to do this assignment
+     (including any necessary amendments or clarifications).
+   • Include a statement of what the arguments and result of each function
+     are, with each function, and any other comments needed to make
+     understanding easy; the statement of what the function does at the
+     beginning could be made invisible to Lisp using initial semicolons,
+     or it could be in double quotes (then this will be evaluated to itself
+     and won't affect the function output, but will be visible to Lisp
+     and thus printed if you print the function definition).
+   • Include a README file explaining contents and usage, and a file of
+     test cases (broad enough to demonstrate correctness of your programs)
+     with your submission. 
+   • In your code, LIMIT LINE LENGTH so that one doesn't need an extra-wide 
+     page to read it (with proper indenting). It should be possible to 
+     print programs, portrait mode, in normal-size font, and the result 
+     should be perspicuous (e.g., limit lines to about 70-80 characters max).
+   • Use INDENTING to make clear the program structure, even though technically
+     the bracketing alone determines that structure.
+
