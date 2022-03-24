@@ -1,8 +1,3 @@
-                            CSC 244/444, Fall 2021
-
-                               LISP PROBLEM SET 1
-                       DUE: 5:00 pm, Monday, Sep. 27/21
-
   • Use LOCAL variables within functions (e.g., introduced by 'let')
     except for truly global parameters (such as a hash table) that multiple
     functions need to access.
