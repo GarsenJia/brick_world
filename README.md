@@ -1,5 +1,5 @@
 # lisp_brick_world
-src.lisp 5 function mentioned in the ./lisp1 are defined in order to create some basic structure of the "Blocks World" 
+src.lisp includes the 5 functions mentioned in the ./lisp1, and they are defined in order to create some basic structure of the "Blocks World" 
 
 To run the program, go the workspace in the department system and run command 
 
